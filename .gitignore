@@ -1,2 +1,9 @@
+# Direnv
+.direnv
+
+# Devenv
+.devenv
+devenv.local.nix
+
 zig-cache
 zig-out
