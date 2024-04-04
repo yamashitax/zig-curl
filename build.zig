@@ -6,14 +6,34 @@ pub fn build(b: *std.build.Builder) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
-    var curlPkg = std.build.Pkg{
+    const curlPkg = std.build.Pkg{
         .name = "curl",
         .source = std.build.FileSource{ .path = "./src/main.zig" },
     };
 
     const lib = b.addStaticLibrary("zig-curl", "src/main.zig");
     lib.setBuildMode(mode);
-    var libs = if (builtin.os.tag == .windows) [_][]const u8{ "c", "curl", "bcrypt", "crypto", "crypt32", "ws2_32", "wldap32", "ssl", "psl", "iconv", "idn2", "unistring", "z", "zstd", "nghttp2", "ssh2", "brotlienc", "brotlidec", "brotlicommon" } else [_][]const u8{ "c", "curl" };
+    const libs = if (builtin.os.tag == .windows) [_][]const u8{
+        "c",
+        "curl",
+        "bcrypt",
+        "crypto",
+        "crypt32",
+        "ws2_32",
+        "wldap32",
+        "ssl",
+        "psl",
+        "iconv",
+        "idn2",
+        "unistring",
+        "z",
+        "zstd",
+        "nghttp2",
+        "ssh2",
+        "brotlienc",
+        "brotlidec",
+        "brotlicommon",
+    } else [_][]const u8{ "c", "curl" };
     for (libs) |i| {
         lib.linkSystemLibrary(i);
     }
