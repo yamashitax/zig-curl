@@ -1,67 +1,58 @@
-const builtin = @import("builtin");
-const std = @import("std");
+pub fn build(b: *Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
 
-pub fn build(b: *std.build.Builder) void {
-    // Standard release options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
-    const mode = b.standardReleaseOptions();
+    const lib = b.addStaticLibrary(.{
+        .name = "zurl",
+        .target = target,
+        .optimize = optimize,
+    });
+    const link_vendor = b.option(
+        bool,
+        "link_vendor",
+        "Whether link to vendored libcurl (default: true)",
+    ) orelse true;
 
-    const curlPkg = std.build.Pkg{
-        .name = "curl",
-        .source = std.build.FileSource{ .path = "./src/main.zig" },
-    };
-
-    const lib = b.addStaticLibrary("zig-curl", "src/main.zig");
-    lib.setBuildMode(mode);
-    const libs = if (builtin.os.tag == .windows) [_][]const u8{
-        "c",
-        "curl",
-        "bcrypt",
-        "crypto",
-        "crypt32",
-        "ws2_32",
-        "wldap32",
-        "ssl",
-        "psl",
-        "iconv",
-        "idn2",
-        "unistring",
-        "z",
-        "zstd",
-        "nghttp2",
-        "ssh2",
-        "brotlienc",
-        "brotlidec",
-        "brotlicommon",
-    } else [_][]const u8{ "c", "curl" };
-    for (libs) |i| {
-        lib.linkSystemLibrary(i);
+    if (link_vendor) {
+        lib.linkLibrary(
+            buildLibCurl(b, target, optimize),
+        );
+    } else {
+        lib.linkSystemLibrary("curl");
     }
-    if (builtin.os.tag == .linux) {
-        lib.linkSystemLibraryNeeded("libcurl");
-    }
-    lib.install();
 
-    const main_tests = b.addTest("src/main.zig");
-    main_tests.setBuildMode(mode);
-    if (builtin.os.tag == .windows) {
-        main_tests.include_dirs.append(.{ .raw_path = "c:/msys64/mingw64/include" }) catch unreachable;
-        main_tests.lib_paths.append("c:/msys64/mingw64/lib") catch unreachable;
-    }
-    main_tests.addPackage(curlPkg);
-    main_tests.linkLibrary(lib);
+    const module = b.addModule("zurl", .{
+        .root_source_file = .{ .path = "src/main.zig" },
+    });
 
-    const exe = b.addExecutable("curl-basic", "example/basic/main.zig");
-    if (builtin.os.tag == .windows) {
-        exe.include_dirs.append(.{ .raw_path = "c:/msys64/mingw64/include" }) catch unreachable;
-        exe.lib_paths.append("c:/msys64/mingw64/lib") catch unreachable;
-    }
-    exe.setBuildMode(mode);
-    exe.addPackage(curlPkg);
-    exe.linkLibrary(lib);
-    b.default_step.dependOn(&exe.step);
-    exe.install();
+    module.linkLibrary(lib);
+
+    const test_exe = b.addTest(.{
+        .root_source_file = .{ .path = "src/main.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+
+    test_exe.linkLibrary(lib);
 
     const test_step = b.step("test", "Run library tests");
-    test_step.dependOn(&main_tests.step);
+    test_step.dependOn(&b.addRunArtifact(test_exe).step);
 }
+
+fn buildLibCurl(b: *Build, target: Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *Step.Compile {
+    const tls = @import("libs/mbedtls.zig").create(b, target, optimize);
+    const zlib = @import("libs/zlib.zig").create(b, target, optimize);
+    const curl = @import("libs/curl.zig").create(b, target, optimize);
+    curl.linkLibrary(tls);
+    curl.linkLibrary(zlib);
+
+    b.installArtifact(curl);
+    return curl;
+}
+
+const std = @import("std");
+
+const Build = std.Build;
+const Step = Build.Step;
+const Module = Build.Module;
+const LazyPath = Build.LazyPath;
